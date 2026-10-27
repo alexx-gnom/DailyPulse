@@ -29,3 +29,27 @@ bool getTelegramUpdates(JsonDocument& doc, const String& botToken, const String&
   if (code != 200) return false;
   return !deserializeJson(doc, body);
 }
+
+// Telegram fetches the image from GitHub itself, so the ESP never buffers JPG bytes.
+bool sendTelegramPhoto(const String& imageUrl, const String& caption) {
+  if (String(TELEGRAM_BOT_TOKEN).startsWith("PUT_") || String(TELEGRAM_CHAT_ID).startsWith("PUT_")) return false;
+  WiFiClientSecure client;
+  client.setInsecure(); // Prototype HTTPS behavior, same as existing Telegram calls.
+  HTTPClient http;
+  http.setTimeout(20000);
+  String url = String("https://api.telegram.org/bot") + TELEGRAM_BOT_TOKEN + "/sendPhoto";
+  if (!http.begin(client, url)) return false;
+  http.addHeader("Content-Type", "application/json");
+  JsonDocument doc;
+  doc["chat_id"] = TELEGRAM_CHAT_ID;
+  doc["photo"] = imageUrl;
+  doc["caption"] = caption;
+  String body;
+  serializeJson(doc, body);
+  const int code = http.POST(body);
+  String response = http.getString();
+  http.end();
+  bool ok = code == 200 && response.indexOf("\"ok\":true") >= 0;
+  Serial.printf("[TG] sendPhoto HTTP %d: %s\n", code, ok ? "OK" : response.c_str());
+  return ok;
+}

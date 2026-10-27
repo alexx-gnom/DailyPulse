@@ -6,6 +6,7 @@
 #include "Config.h"
 #include "ScheduleService.h"
 #include "TelegramService.h"
+#include "DailyContentService.h"
 
 Preferences prefs;
 String lastSchedule = "";
@@ -18,6 +19,50 @@ uint32_t lastWifiMs = 0;
 uint32_t lastBootReportAttemptMs = 0;
 uint32_t lastDailyAttemptMs = 0;
 bool bootReportSent = false;
+// Test-only state: intentionally resets at each boot.
+bool previewMorningSent = false;
+bool previewEveningSent = false;
+uint32_t lastPreviewAttemptMs = 0;
+
+void sendStartupPreview() {
+  if (!Config::TEST_SEND_BOTH_ON_BOOT || previewEveningSent) return;
+  const uint32_t now = millis();
+  if (lastPreviewAttemptMs != 0 && now - lastPreviewAttemptMs < Config::DAILY_CONTENT_RETRY_MS) return;
+  lastPreviewAttemptMs = now;
+  DailyContent content;
+  String error;
+  if (!fetchDailyContent(Clock::date(), content, error)) {
+    Serial.printf("[DAILY] Fetch failed: %s\n", error.c_str());
+    return;
+  }
+  if (!previewMorningSent) {
+    Serial.println("[DAILY] Sending morning preview...");
+    // Even if the image is unavailable, show the text to test its layout.
+    const bool photoOk = sendTelegramPhoto(content.morningImageUrl, content.morningCaption);
+    if (!photoOk) {
+      Serial.println("[DAILY] Morning photo failed. Will retry on next attempt.");
+      return;
+    }
+    previewMorningSent = true;
+    if (content.morningExtra.length()) {
+      // This may be sent again if the next step fails; acceptable for preview mode.
+      if (!sendTelegram(content.morningExtra)) {
+        Serial.println("[DAILY] Extra holiday text failed.");
+      }
+    }
+    delay(1000);
+  }
+  if (!previewEveningSent) {
+    Serial.println("[DAILY] Sending evening preview...");
+    if (!sendTelegramPhoto(content.eveningImageUrl, content.eveningCaption)) {
+      Serial.println("[DAILY] Evening photo failed. Will retry evening only.");
+      return;
+    }
+    previewEveningSent = true;
+    Serial.println("[DAILY] Both preview photos delivered.");
+  }
+}
+
 
 void checkTelegramCommands() {
   if (millis() - lastTelegramMs < Config::TELEGRAM_POLL_MS) return;
@@ -138,6 +183,7 @@ void loop() {
   }
 
   checkTelegramCommands();
+  sendStartupPreview();
 
   if (!bootReportSent &&
       (lastBootReportAttemptMs == 0 || nowMs - lastBootReportAttemptMs >= Config::RETRY_REPORT_MS)) {

@@ -3,6 +3,9 @@
 
 // DTEK data is aggregated by the existing GitHub Actions repository.
 namespace Config {
+constexpr bool TEST_SEND_BOTH_ON_BOOT = false; // Disable after Telegram layout test.
+constexpr char DAILY_URL[] = "https://raw.githubusercontent.com/alexx-gnom/blackout-to-tg/refs/heads/main/dailypulse_calendar/daily.json";
+constexpr uint32_t DAILY_CONTENT_RETRY_MS = 30000UL;
 constexpr char SCHEDULE_URL[] = "https://raw.githubusercontent.com/alexx-gnom/blackout-to-tg/main/schedule.json";
 constexpr char CITY[] = "м. Ірпінь";
 constexpr char STREET[] = "вул. Мінеральна";
