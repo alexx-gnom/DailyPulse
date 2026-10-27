@@ -7,6 +7,7 @@
 #include "ScheduleService.h"
 #include "TelegramService.h"
 #include "DailyContentService.h"
+#include "WeatherService.h"
 
 Preferences prefs;
 String lastSchedule = "";
@@ -23,6 +24,41 @@ bool bootReportSent = false;
 bool previewMorningSent = false;
 bool previewEveningSent = false;
 uint32_t lastPreviewAttemptMs = 0;
+String lastWeatherDate = "";
+bool bootWeatherSent = false;
+uint32_t lastWeatherAttemptMs = 0;
+
+bool sendWeatherNow() {
+  String msg, err;
+  if (!fetchWeatherMessage(msg, err)) {
+    Serial.printf("[WEATHER] Failed: %s\n", err.c_str());
+    return false;
+  }
+  Serial.println("[WEATHER] Sending forecast...");
+  return sendTelegram(msg);
+}
+
+void checkWeather() {
+  if (Config::TEST_WEATHER_ON_BOOT) {
+    // In preview mode, send after the two daily photos. Do not mark scheduled delivery.
+    if (!previewEveningSent || bootWeatherSent) return;
+  } else {
+    // Normal mode: once per date, at or after 07:05, never the following day.
+    if (lastWeatherDate == Clock::date() || minuteOfDay() < Config::WEATHER_MINUTE) return;
+  }
+  const uint32_t now = millis();
+  if (lastWeatherAttemptMs != 0 && now - lastWeatherAttemptMs < Config::WEATHER_RETRY_MS) return;
+  lastWeatherAttemptMs = now;
+  if (sendWeatherNow()) {
+    if (Config::TEST_WEATHER_ON_BOOT) {
+      bootWeatherSent = true;
+    } else {
+      lastWeatherDate = Clock::date();
+      prefs.putString("weatherDate", lastWeatherDate);
+    }
+  }
+}
+
 
 void sendStartupPreview() {
   if (!Config::TEST_SEND_BOTH_ON_BOOT || previewEveningSent) return;
@@ -89,6 +125,8 @@ void checkTelegramCommands() {
       } else {
         sendTelegram("⚠️ Не вдалося отримати свіжий графік ДТЕК: " + error + ". Попередній графік не вважається актуальним.");
       }
+    } else if (text == "/weather" || text.startsWith("/weather@")) {
+      if (!sendWeatherNow()) sendTelegram("⚠️ Не вдалося отримати прогноз погоди. Спробуй пізніше.");
     } else if (text == "/start" || text == "/help") {
       sendTelegram("Бот графіків ДТЕК, Ірпінь, черга 6.1.\n/schedule — отримати графік зараз.");
     }
@@ -146,6 +184,7 @@ void setup() {
   lastReportDate = prefs.getString("reportDate", "");
   lastFactUpdate = prefs.getString("factUpdate", "");
   tgOffset = prefs.getString("tgOffset", "0");
+  lastWeatherDate = prefs.getString("weatherDate", "");
 
   WiFi.mode(WIFI_STA);
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
@@ -184,6 +223,7 @@ void loop() {
 
   checkTelegramCommands();
   sendStartupPreview();
+  checkWeather();
 
   if (!bootReportSent &&
       (lastBootReportAttemptMs == 0 || nowMs - lastBootReportAttemptMs >= Config::RETRY_REPORT_MS)) {

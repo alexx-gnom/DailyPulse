@@ -4,6 +4,9 @@
 // DTEK data is aggregated by the existing GitHub Actions repository.
 namespace Config {
 constexpr bool TEST_SEND_BOTH_ON_BOOT = false; // Disable after Telegram layout test.
+constexpr bool TEST_WEATHER_ON_BOOT = false; // Preview after morning/evening; set false for 07:05 schedule.
+constexpr int WEATHER_MINUTE = 7 * 60 + 5;
+constexpr uint32_t WEATHER_RETRY_MS = 60000UL;
 constexpr char DAILY_URL[] = "https://raw.githubusercontent.com/alexx-gnom/blackout-to-tg/refs/heads/main/dailypulse_calendar/daily.json";
 constexpr uint32_t DAILY_CONTENT_RETRY_MS = 30000UL;
 constexpr char SCHEDULE_URL[] = "https://raw.githubusercontent.com/alexx-gnom/blackout-to-tg/main/schedule.json";
